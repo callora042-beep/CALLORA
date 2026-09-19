@@ -1,0 +1,17 @@
+{
+  "name": "callora",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Callora — voice-call marketplace with AI call-assist and cloned-voice replies",
+  "scripts": {
+    "dev": "netlify dev"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.0.0",
+    "form-data": "^4.0.0",
+    "node-fetch": "^2.7.0"
+  },
+  "devDependencies": {
+    "netlify-cli": "^17.0.0"
+  }
+}
