@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Callora — Clone Your Voice</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --violet: #8B7CFF;
+    --blue: #4F8CFF;
+    --bg-dark: #0E0B1F;
+    --card-dark: #171330;
+    --border-dark: #2A2450;
+    --muted: #9C96C4;
+    --gradient: linear-gradient(135deg, var(--violet), var(--blue));
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Poppins', sans-serif;
+    background: var(--bg-dark);
+    color: white;
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    padding: 30px 16px;
+  }
+  .wrap { width: 100%; max-width: 420px; }
+  .brand-row { display: flex; align-items: center; gap: 8px; margin-bottom: 24px; }
+  .brand-row .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--gradient); }
+  .brand-row span { font-weight: 700; font-size: 16px; }
+
+  h1 { font-size: 22px; margin-bottom: 6px; }
+  .sub { color: var(--muted); font-size: 13px; margin-bottom: 28px; line-height: 1.5; }
+
+  .sample-card {
+    background: var(--card-dark);
+    border: 1px solid var(--border-dark);
+    border-radius: 14px;
+    padding: 16px;
+    margin-bottom: 14px;
+  }
+  .sample-card .label { font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+  .sample-card .script {
+    font-size: 14px;
+    line-height: 1.5;
+    margin-bottom: 14px;
+  }
+  .sample-card .controls { display: flex; align-items: center; gap: 10px; }
+  .rec-btn {
+    width: 44px; height: 44px; border-radius: 50%;
+    background: var(--gradient);
+    border: none;
+    color: white;
+    font-size: 16px;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .rec-btn.recording { background: #FF5C5C; }
+  .status-text { font-size: 12px; color: var(--muted); flex: 1; }
+  .status-text.done { color: #4ADE80; }
+  audio { width: 100%; margin-top: 10px; height: 34px; }
+
+  .btn {
+    background: var(--gradient);
+    color: white;
+    text-align: center;
+    padding: 15px;
+    border-radius: 12px;
+    font-size: 14px;
+    font-weight: 600;
+    margin-top: 20px;
+    border: none;
+    width: 100%;
+    cursor: pointer;
+  }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .note { font-size: 11px; color: var(--muted); text-align: center; margin-top: 12px; line-height: 1.5; }
+  .result { display: none; margin-top: 20px; background: var(--card-dark); border: 1px solid #2E6B4A; border-radius: 12px; padding: 16px; font-size: 13px; }
+  .result.show { display: block; }
+  .error { display: none; margin-top: 20px; background: var(--card-dark); border: 1px solid #7A2E2E; border-radius: 12px; padding: 16px; font-size: 13px; color: #FF9C9C; }
+  .error.show { display: block; }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <div class="brand-row"><div class="dot"></div><span>Callora</span></div>
+  <h1>Clone your voice</h1>
+  <div class="sub">Read the three lines below out loud, one at a time. This gives the AI enough of your voice to speak naturally for you during auto-mode calls.</div>
+
+  <div class="sample-card" data-sample="0">
+    <div class="label">Sample 1 of 3</div>
+    <div class="script">"Hey, sorry I couldn't pick up earlier — what's going on?"</div>
+    <div class="controls">
+      <button class="rec-btn" onclick="toggleRecord(0)">🎙️</button>
+      <div class="status-text" id="status-0">Not recorded yet</div>
+    </div>
+    <audio id="audio-0" controls style="display:none;"></audio>
+  </div>
+
+  <div class="sample-card" data-sample="1">
+    <div class="label">Sample 2 of 3</div>
+    <div class="script">"I'll be honest, I'm not totally sure yet, but I'll figure it out soon."</div>
+    <div class="controls">
+      <button class="rec-btn" onclick="toggleRecord(1)">🎙️</button>
+      <div class="status-text" id="status-1">Not recorded yet</div>
+    </div>
+    <audio id="audio-1" controls style="display:none;"></audio>
+  </div>
+
+  <div class="sample-card" data-sample="2">
+    <div class="label">Sample 3 of 3</div>
+    <div class="script">"That sounds great, honestly — let's plan for Saturday afternoon then."</div>
+    <div class="controls">
+      <button class="rec-btn" onclick="toggleRecord(2)">🎙️</button>
+      <div class="status-text" id="status-2">Not recorded yet</div>
+    </div>
+    <audio id="audio-2" controls style="display:none;"></audio>
+  </div>
+
+  <button class="btn" id="uploadBtn" disabled onclick="uploadVoice()">Create my cloned voice</button>
+  <div class="note">Recordings are sent securely to create your voice profile. You can re-record any sample before uploading.</div>
+
+  <div class="result" id="result"></div>
+  <div class="error" id="error"></div>
+</div> <script type="module">
+  import { auth } from "./js/firebase-config.js";
+  import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+
+  let currentUser = null;
+
+  onAuthStateChanged(auth, (user) => {
+    if (!user) { window.location.href = 'login.html'; return; }
+    currentUser = user;
+  });
+
+  window.getCurrentUserId = () => currentUser?.uid;
+</script>
+
+<script>
+  const recordings = [null, null, null];
+  const mediaRecorders = [null, null, null];
+  const chunksBySample = [[], [], []];
+  let currentStream = null;
+
+  async function toggleRecord(i) {
+    const btn = document.querySelectorAll('.rec-btn')[i];
+    const statusEl = document.getElementById('status-' + i);
+
+    if (btn.classList.contains('recording')) {
+      mediaRecorders[i].stop();
+      btn.classList.remove('recording');
+      btn.textContent = '🎙️';
+      return;
+    }
+
+    try {
+      currentStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch (err) {
+      statusEl.textContent = 'Microphone access denied';
+      return;
+    }
+
+    chunksBySample[i] = [];
+    const recorder = new MediaRecorder(currentStream);
+    mediaRecorders[i] = recorder;
+
+    recorder.ondataavailable = (e) => chunksBySample[i].push(e.data);
+    recorder.onstop = () => {
+      const blob = new Blob(chunksBySample[i], { type: 'audio/webm' });
+      recordings[i] = blob;
+      const audioEl = document.getElementById('audio-' + i);
+      audioEl.src = URL.createObjectURL(blob);
+      audioEl.style.display = 'block';
+      statusEl.textContent = 'Recorded — tap 🎙️ to redo';
+      statusEl.classList.add('done');
+      currentStream.getTracks().forEach(t => t.stop());
+      checkReady();
+    };
+
+    recorder.start();
+    btn.classList.add('recording');
+    btn.textContent = '⏹️';
+    statusEl.textContent = 'Recording... tap to stop';
+    statusEl.classList.remove('done');
+  }
+
+  function checkReady() {
+    const allDone = recordings.every(r => r !== null);
+    document.getElementById('uploadBtn').disabled = !allDone;
+  }
+
+  function blobToBase64(blob) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  async function uploadVoice() {
+    const uploadBtn = document.getElementById('uploadBtn');
+    const resultEl = document.getElementById('result');
+    const errorEl = document.getElementById('error');
+    resultEl.classList.remove('show');
+    errorEl.classList.remove('show');
+    uploadBtn.disabled = true;
+    uploadBtn.textContent = 'Uploading...';
+
+    try {
+      const audioSamples = await Promise.all(recordings.map(blobToBase64));
+
+      const userId = window.getCurrentUserId();
+      if (!userId) throw new Error('You need to be logged in to do this.');
+
+      const res = await fetch('/.netlify/functions/clone-voice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, audioSamples }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error?.detail?.message || data.error || 'Upload failed');
+      }
+
+      resultEl.textContent = 'Your voice has been cloned. Callora will use it for auto-mode replies from now on.';
+      resultEl.classList.add('show');
+      uploadBtn.textContent = 'Voice cloned ✓';
+    } catch (err) {
+      errorEl.textContent = 'Something went wrong: ' + err.message;
+      errorEl.classList.add('show');
+      uploadBtn.disabled = false;
+      uploadBtn.textContent = 'Create my cloned voice';
+    }
+  }
+</script>
+
+</body>
+</html>
