@@ -1,0 +1,17 @@
+{
+  "name": "callora-relay-server",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Always-on WebSocket relay: bridges Twilio Media Streams to Deepgram (STT), Claude (suggestions), and ElevenLabs (cloned-voice TTS)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "ws": "^8.16.0",
+    "firebase-admin": "^12.0.0",
+    "node-fetch": "^2.7.0",
+    "@deepgram/sdk": "^3.1.0",
+    "@anthropic-ai/sdk": "^0.24.0"
+  }
+}
