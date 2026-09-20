@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Callora — Call history</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --violet: #8B7CFF; --blue: #4F8CFF; --bg-dark: #0E0B1F;
+    --card-dark: #171330; --border-dark: #2A2450; --muted: #9C96C4;
+    --gradient: linear-gradient(135deg, var(--violet), var(--blue));
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Poppins', sans-serif; background: var(--bg-dark); color: white; min-height: 100vh; }
+  .content { max-width: 480px; margin: 0 auto; padding: 24px 20px 100px; }
+  .brand-row { display: flex; align-items: center; gap: 8px; margin-bottom: 20px; }
+  .brand-row .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--gradient); }
+  .brand-row span { font-weight: 700; font-size: 16px; }
+  h1 { font-size: 18px; margin-bottom: 16px; }
+  .call-row {
+    background: var(--card-dark); border: 1px solid var(--border-dark); border-radius: 12px;
+    padding: 14px; display: flex; gap: 12px; align-items: center; margin-bottom: 10px;
+  }
+  .avatar { width: 40px; height: 40px; border-radius: 50%; background: var(--gradient); flex-shrink: 0; }
+  .call-row .info { flex: 1; }
+  .call-row .name { font-size: 13px; font-weight: 600; }
+  .call-row .time { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .duration { font-size: 12px; color: var(--muted); }
+  .empty { text-align: center; color: var(--muted); font-size: 13px; padding: 40px 0; }
+  .tabbar { position: fixed; bottom: 0; left: 0; right: 0; display: flex; justify-content: space-around; padding: 14px 0; border-top: 1px solid var(--border-dark); background: var(--bg-dark); font-size: 10px; color: var(--muted); max-width: 480px; margin: 0 auto; }
+  .tabbar a { color: inherit; text-decoration: none; }
+  .tabbar a.on { color: var(--blue); font-weight: 600; }
+</style>
+</head>
+<body>
+
+<div class="content">
+  <div class="brand-row"><div class="dot"></div><span>Callora</span></div>
+  <h1>Call history</h1>
+  <div id="callList"><div class="empty">Loading...</div></div>
+</div>
+
+<div class="tabbar">
+  <a href="home.html">Home</a>
+  <a href="calls.html" class="on">Calls</a>
+  <a href="account.html">Profile</a>
+</div>
+
+<script type="module">
+  import { auth, db } from "./js/firebase-config.js";
+  import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+  import { collection, query, where, orderBy, limit, getDocs } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+  onAuthStateChanged(auth, (user) => {
+    if (!user) { window.location.href = 'login.html'; return; }
+    loadCalls(user.uid);
+  });
+
+  async function loadCalls(uid) {
+    const listEl = document.getElementById('callList');
+    try {
+      const asCallerQ = query(collection(db, 'calls'), where('callerId', '==', uid), orderBy('startedAt', 'desc'), limit(20));
+      const asProviderQ = query(collection(db, 'calls'), where('providerId', '==', uid), orderBy('startedAt', 'desc'), limit(20));
+      const [callerSnap, providerSnap] = await Promise.all([getDocs(asCallerQ), getDocs(asProviderQ)]);
+      const calls = [...callerSnap.docs, ...providerSnap.docs]
+        .map(d => ({ id: d.id, ...d.data() }))
+        .sort((a, b) => (b.startedAt?.seconds || 0) - (a.startedAt?.seconds || 0));
+
+      if (calls.length === 0) {
+        listEl.innerHTML = `<div class="empty">No calls yet — head to Home to start one.</div>`;
+        return;
+      }
+
+      listEl.innerHTML = calls.map(c => {
+        const otherRole = c.callerId === uid ? 'provider' : 'caller';
+        const mins = c.durationSec ? Math.round(c.durationSec / 60) : 0;
+        return `
+          <div class="call-row">
+            <div class="avatar"></div>
+            <div class="info">
+              <div class="name">Call with a ${otherRole}</div>
+              <div class="time">${c.startedAt?.toDate ? c.startedAt.toDate().toLocaleString() : 'Recent'}</div>
+            </div>
+            <div class="duration">${c.status === 'ended' ? `${mins} min` : c.status}</div>
+          </div>
+        `;
+      }).join('');
+    } catch (err) {
+      listEl.innerHTML = `<div class="empty">Couldn't load call history</div>`;
+    }
+  }
+</script>
+
+</body>
+</html>
