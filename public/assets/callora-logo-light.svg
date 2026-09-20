@@ -1,0 +1,25 @@
+<svg width="600" height="180" viewBox="0 0 600 180" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="calloraGradLight" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#6E4CFF"/>
+      <stop offset="100%" stop-color="#2E6DF6"/>
+    </linearGradient>
+    <style>
+      .word { font-family: 'Poppins', 'Segoe UI', sans-serif; font-weight: 700; letter-spacing: -1px; }
+      .tag { font-family: 'Poppins', 'Segoe UI', sans-serif; font-weight: 400; letter-spacing: 0.5px; }
+    </style>
+  </defs>
+
+  <rect width="600" height="180" fill="#FAFAFC"/>
+
+  <text x="50" y="105" class="word" font-size="72" fill="url(#calloraGradLight)">Call</text>
+  <g transform="translate(238,58)">
+    <rect x="0" y="18" width="6" height="20" rx="3" fill="#6E4CFF"/>
+    <rect x="12" y="8" width="6" height="40" rx="3" fill="#5B5DF9"/>
+    <rect x="24" y="0" width="6" height="56" rx="3" fill="#4064F5"/>
+    <rect x="36" y="12" width="6" height="32" rx="3" fill="#2E6DF6"/>
+  </g>
+  <text x="290" y="105" class="word" font-size="72" fill="url(#calloraGradLight)">ora</text>
+
+  <text x="52" y="140" class="tag" font-size="15" fill="#6B6880">Your time. Your conversation.</text>
+</svg>
