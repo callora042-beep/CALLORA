@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Callora — Home</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --violet: #8B7CFF; --blue: #4F8CFF; --bg-dark: #0E0B1F;
+    --card-dark: #171330; --border-dark: #2A2450; --muted: #9C96C4;
+    --gradient: linear-gradient(135deg, var(--violet), var(--blue));
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Poppins', sans-serif; background: var(--bg-dark); color: white;
+    min-height: 100vh; display: flex; flex-direction: column;
+  }
+  .content { flex: 1; padding: 24px 20px 100px; max-width: 480px; margin: 0 auto; width: 100%; }
+  .brand-row { display: flex; align-items: center; gap: 8px; margin-bottom: 20px; }
+  .brand-row .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--gradient); }
+  .brand-row span { font-weight: 700; font-size: 16px; }
+  .search-bar {
+    background: var(--card-dark); border: 1px solid var(--border-dark); border-radius: 12px;
+    padding: 12px 14px; font-size: 13px; color: var(--muted); margin-bottom: 16px;
+    width: 100%; font-family: 'Poppins', sans-serif;
+  }
+  .chip-row { display: flex; gap: 8px; overflow-x: auto; margin-bottom: 20px; }
+  .chip {
+    background: var(--card-dark); border: 1px solid var(--border-dark); border-radius: 20px;
+    padding: 6px 14px; font-size: 12px; white-space: nowrap; color: var(--muted); cursor: pointer;
+  }
+  .chip.on { background: var(--gradient); color: white; border-color: transparent; }
+  .provider-card {
+    background: var(--card-dark); border: 1px solid var(--border-dark); border-radius: 14px;
+    padding: 14px; display: flex; gap: 12px; align-items: center; margin-bottom: 12px; cursor: pointer;
+  }
+  .avatar { width: 44px; height: 44px; border-radius: 50%; background: var(--gradient); flex-shrink: 0; }
+  .provider-card .info { flex: 1; }
+  .provider-card .info .name { font-size: 14px; font-weight: 600; }
+  .provider-card .info .meta { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .rate { font-size: 12px; font-weight: 600; color: var(--blue); white-space: nowrap; }
+  .empty { text-align: center; color: var(--muted); font-size: 13px; padding: 40px 0; }
+  .tabbar {
+    position: fixed; bottom: 0; left: 0; right: 0; display: flex; justify-content: space-around;
+    padding: 14px 0; border-top: 1px solid var(--border-dark); background: var(--bg-dark);
+    font-size: 10px; color: var(--muted); max-width: 480px; margin: 0 auto;
+  }
+  .tabbar a { color: inherit; text-decoration: none; }
+  .tabbar a.on { color: var(--blue); font-weight: 600; }
+</style>
+</head>
+<body>
+
+<div class="content">
+  <div class="brand-row"><div class="dot"></div><span>Callora</span></div>
+  <input class="search-bar" id="searchInput" placeholder="Search people to talk to...">
+  <div class="chip-row" id="chipRow">
+    <div class="chip on" data-category="all">All</div>
+    <div class="chip" data-category="chat">Just chat</div>
+    <div class="chip" data-category="advice">Advice</div>
+    <div class="chip" data-category="language">Language practice</div>
+    <div class="chip" data-category="vent">Vent</div>
+  </div>
+  <div id="providerList"><div class="empty">Loading providers...</div></div>
+</div>
+
+<div class="tabbar">
+  <a href="home.html" class="on">Home</a>
+  <a href="calls.html">Calls</a>
+  <a href="account.html">Profile</a>
+</div>
+
+<script type="module">
+  import { auth, db } from "./js/firebase-config.js";
+  import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+  import { collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+  let allProviders = [];
+
+  onAuthStateChanged(auth, (user) => {
+    if (!user) {
+      window.location.href = 'login.html';
+      return;
+    }
+    loadProviders();
+  });
+
+  async function loadProviders() {
+    const listEl = document.getElementById('providerList');
+    try {
+      const q = query(collection(db, 'users'), where('role', 'in', ['provider', 'both']));
+      const snap = await getDocs(q);
+      allProviders = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      renderProviders(allProviders);
+    } catch (err) {
+      listEl.innerHTML = `<div class="empty">Couldn't load providers — check your connection.</div>`;
+    }
+  }
+
+  function renderProviders(providers) {
+    const listEl = document.getElementById('providerList');
+    if (providers.length === 0) {
+      listEl.innerHTML = `<div class="empty">No providers found yet — check back soon.</div>`;
+      return;
+    }
+    listEl.innerHTML = providers.map(p => `
+      <div class="provider-card" onclick="window.location.href='provider.html?id=${p.id}'">
+        <div class="avatar"></div>
+        <div class="info">
+          <div class="name">${escapeHtml(p.name || 'Callora user')}</div>
+          <div class="meta">${p.online ? 'Online now' : 'Offline'} · Provider</div>
+        </div>
+        <div class="rate">Free</div>
+      </div>
+    `).join('');
+  }
+
+  document.getElementById('searchInput').addEventListener('input', (e) => {
+    const term = e.target.value.toLowerCase();
+    renderProviders(allProviders.filter(p => (p.name || '').toLowerCase().includes(term)));
+  });
+
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+</script>
+
+</body>
+</html>
