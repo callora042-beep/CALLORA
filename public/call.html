@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Callora — Call</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --violet: #8B7CFF; --blue: #4F8CFF; --bg-dark: #0E0B1F;
+    --card-dark: #171330; --border-dark: #2A2450; --muted: #9C96C4;
+    --gradient: linear-gradient(135deg, var(--violet), var(--blue));
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Poppins', sans-serif; background: var(--bg-dark); color: white; min-height: 100vh; }
+  .content { max-width: 480px; margin: 0 auto; padding: 24px 20px 30px; display: flex; flex-direction: column; min-height: 100vh; }
+  .live-badge { color: #FF5C5C; font-size: 11px; font-weight: 600; text-align: center; margin-bottom: 12px; }
+  .avatar { width: 70px; height: 70px; border-radius: 50%; background: var(--gradient); margin: 0 auto 10px; }
+  .call-name { font-size: 17px; font-weight: 600; text-align: center; }
+  .call-timer { font-size: 13px; color: var(--muted); text-align: center; margin-top: 2px; }
+
+  .transcript-line {
+    background: var(--card-dark); border: 1px solid var(--border-dark);
+    border-radius: 12px; padding: 12px 14px; font-size: 13px; margin: 20px 0; line-height: 1.4;
+  }
+  .transcript-line .who { font-size: 10px; color: var(--muted); margin-bottom: 4px; }
+
+  .suggestions-label { font-size: 12px; color: var(--muted); margin-bottom: 10px; }
+  .suggestion {
+    background: var(--card-dark); border: 1px solid var(--border-dark); border-radius: 12px;
+    padding: 13px 14px; font-size: 13px; margin-bottom: 10px; cursor: pointer;
+  }
+  .suggestion:hover, .suggestion:active { border-color: var(--violet); }
+  .custom-input {
+    width: 100%; background: var(--card-dark); border: 1px solid var(--border-dark);
+    border-radius: 12px; padding: 13px 14px; font-size: 13px; color: white;
+    margin-bottom: 10px; font-family: 'Poppins', sans-serif;
+  }
+
+  .mode-row {
+    display: flex; gap: 8px; margin: 20px 0; justify-content: center;
+  }
+  .mode-btn {
+    flex: 1; text-align: center; padding: 10px; border-radius: 10px;
+    border: 1px solid var(--border-dark); font-size: 12px; color: var(--muted); cursor: pointer;
+  }
+  .mode-btn.on { background: var(--gradient); color: white; border-color: transparent; }
+
+  .spacer { flex: 1; }
+  .call-controls { display: flex; justify-content: center; gap: 24px; margin-top: 20px; }
+  .call-btn {
+    width: 54px; height: 54px; border-radius: 50%; display: flex; align-items: center;
+    justify-content: center; background: var(--card-dark); border: 1px solid var(--border-dark);
+    font-size: 20px; cursor: pointer;
+  }
+  .call-btn.end { background: #FF5C5C; border-color: transparent; }
+  .waiting { color: var(--muted); font-size: 12px; text-align: center; margin: 20px 0; }
+</style>
+</head>
+<body>
+
+<div class="content">
+  <div class="live-badge">🔴 LIVE CALL</div>
+  <div class="avatar"></div>
+  <div class="call-name" id="callName">Connecting...</div>
+  <div class="call-timer" id="callTimer">00:00</div>
+
+  <div id="transcriptArea"></div>
+
+  <div id="suggestionArea">
+    <div class="waiting">Listening for the next thing to respond to...</div>
+  </div>
+
+  <div class="mode-row">
+    <div class="mode-btn" id="modeAssist" onclick="setMode('assist')">👤 Assist</div>
+    <div class="mode-btn" id="modeAuto" onclick="setMode('auto')">🤖 Auto</div>
+  </div>
+
+  <div class="spacer"></div>
+
+  <div class="call-controls">
+    <div class="call-btn">🔇</div>
+    <div class="call-btn end" onclick="endCall()">📞</div>
+  </div>
+</div> <script type="module">
+  import { auth, db } from "./js/firebase-config.js";
+  import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+  import { doc, onSnapshot, updateDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+  const params = new URLSearchParams(window.location.search);
+  const callId = params.get('callId');
+  let currentUser = null;
+  let currentMode = 'assist';
+  let timerInterval = null;
+  let startTime = null;
+
+  onAuthStateChanged(auth, (user) => {
+    if (!user) { window.location.href = 'login.html'; return; }
+    currentUser = user;
+    if (!callId) { document.getElementById('callName').textContent = 'Call not found'; return; }
+    watchCall();
+  });
+
+  function watchCall() {
+    const callRef = doc(db, 'calls', callId);
+    onSnapshot(callRef, (snap) => {
+      const data = snap.data();
+      if (!data) return;
+
+      currentMode = data.mode || 'assist';
+      updateModeButtons();
+
+      if (data.status === 'active' && !timerInterval) {
+        startTime = Date.now();
+        timerInterval = setInterval(updateTimer, 1000);
+      }
+      if (data.status === 'ended') {
+        clearInterval(timerInterval);
+        document.getElementById('callTimer').textContent = 'Call ended';
+        document.getElementById('suggestionArea').innerHTML = '';
+      }
+
+      renderTranscript(data.liveTranscript || []);
+      renderSuggestions(data.currentSuggestions);
+    });
+  }
+
+  function updateTimer() {
+    const secs = Math.floor((Date.now() - startTime) / 1000);
+    const m = String(Math.floor(secs / 60)).padStart(2, '0');
+    const s = String(secs % 60).padStart(2, '0');
+    document.getElementById('callTimer').textContent = `${m}:${s}`;
+  }
+
+  function renderTranscript(lines) {
+    const last = lines[lines.length - 1];
+    const area = document.getElementById('transcriptArea');
+    if (!last) { area.innerHTML = ''; return; }
+    area.innerHTML = `
+      <div class="transcript-line">
+        <div class="who">${last.speaker === 'caller' ? 'THEY SAID' : 'YOU SAID'}</div>
+        "${escapeHtml(last.text)}"
+      </div>
+    `;
+  }
+
+  function renderSuggestions(suggestions) {
+    const area = document.getElementById('suggestionArea');
+    if (!suggestions || suggestions.length === 0) {
+      area.innerHTML = `<div class="waiting">Listening for the next thing to respond to...</div>`;
+      return;
+    }
+    if (currentMode === 'auto') {
+      area.innerHTML = `<div class="waiting">Auto mode is replying for you...</div>`;
+      return;
+    }
+    area.innerHTML = `
+      <div class="suggestions-label">Pick a reply, or write your own</div>
+      ${suggestions.map((s, i) => `<div class="suggestion" onclick="chooseReply(${i})">${i + 1}. ${escapeHtml(s)}</div>`).join('')}
+      <input class="custom-input" id="customReply" placeholder="Write your own response..." onkeydown="if(event.key==='Enter') sendCustomReply()">
+    `;
+    window.__suggestions = suggestions;
+  }
+
+  window.chooseReply = async (i) => {
+    await updateDoc(doc(db, 'calls', callId), { chosenReply: window.__suggestions[i] });
+  };
+
+  window.sendCustomReply = async () => {
+    const input = document.getElementById('customReply');
+    const text = input.value.trim();
+    if (!text) return;
+    await updateDoc(doc(db, 'calls', callId), { chosenReply: text });
+  };
+
+  window.setMode = async (mode) => {
+    currentMode = mode;
+    updateModeButtons();
+    await updateDoc(doc(db, 'calls', callId), { mode });
+  };
+
+  function updateModeButtons() {
+    document.getElementById('modeAssist').classList.toggle('on', currentMode === 'assist');
+    document.getElementById('modeAuto').classList.toggle('on', currentMode === 'auto');
+  }
+
+  window.endCall = async () => {
+    await updateDoc(doc(db, 'calls', callId), { status: 'ended' });
+    window.location.href = 'home.html';
+  };
+
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+</script>
+
+</body>
+</html>
