@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Callora — Provider profile</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --violet: #8B7CFF; --blue: #4F8CFF; --bg-dark: #0E0B1F;
+    --card-dark: #171330; --border-dark: #2A2450; --muted: #9C96C4;
+    --gradient: linear-gradient(135deg, var(--violet), var(--blue));
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Poppins', sans-serif; background: var(--bg-dark); color: white; min-height: 100vh; }
+  .content { max-width: 480px; margin: 0 auto; padding: 30px 20px 40px; }
+  .back { color: var(--muted); font-size: 13px; margin-bottom: 20px; display: inline-block; text-decoration: none; }
+  .profile-header { text-align: center; margin-bottom: 20px; }
+  .avatar { width: 80px; height: 80px; border-radius: 50%; background: var(--gradient); margin: 0 auto 12px; }
+  .name { font-size: 18px; font-weight: 600; }
+  .meta { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .stat-row { display: flex; justify-content: space-around; margin: 20px 0; }
+  .stat { text-align: center; }
+  .num { font-size: 16px; font-weight: 700; }
+  .label { font-size: 11px; color: var(--muted); }
+  .bio { font-size: 13px; color: var(--muted); line-height: 1.5; margin-bottom: 24px; text-align: center; }
+  .btn {
+    background: var(--gradient); color: white; text-align: center; padding: 15px;
+    border-radius: 12px; font-size: 14px; font-weight: 600; margin-top: 8px;
+    border: none; width: 100%; cursor: pointer;
+  }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-outline {
+    border: 1px solid var(--border-dark); color: var(--muted); text-align: center;
+    padding: 13px; border-radius: 12px; font-size: 13px; margin-top: 10px; cursor: pointer;
+  }
+  .error { color: #FF9C9C; font-size: 12px; text-align: center; margin-top: 12px; display: none; }
+  .error.show { display: block; }
+</style>
+</head>
+<body>
+
+<div class="content">
+  <a class="back" href="home.html">← Back</a>
+  <div class="profile-header">
+    <div class="avatar"></div>
+    <div class="name" id="pName">Loading...</div>
+    <div class="meta" id="pMeta"></div>
+  </div>
+  <div class="stat-row">
+    <div class="stat"><div class="num" id="pRating">—</div><div class="label">Rating</div></div>
+    <div class="stat"><div class="num" id="pCalls">—</div><div class="label">Calls</div></div>
+    <div class="stat"><div class="num" id="pResponse">—</div><div class="label">Response</div></div>
+  </div>
+  <div class="bio" id="pBio">This provider hasn't added a bio yet.</div>
+  <button class="btn" id="callBtn" onclick="startCall()">Call now</button>
+  <div class="btn-outline">Send a message</div>
+  <div class="error" id="errorMsg"></div>
+</div>
+
+<script type="module">
+  import { auth, db } from "./js/firebase-config.js";
+  import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+  import { doc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+  const params = new URLSearchParams(window.location.search);
+  const providerId = params.get('id');
+  let currentUser = null;
+  let providerData = null;
+
+  onAuthStateChanged(auth, async (user) => {
+    if (!user) { window.location.href = 'login.html'; return; }
+    currentUser = user;
+    await loadProvider();
+  });
+
+  async function loadProvider() {
+    if (!providerId) {
+      document.getElementById('pName').textContent = 'Provider not found';
+      return;
+    }
+    const snap = await getDoc(doc(db, 'users', providerId));
+    if (!snap.exists()) {
+      document.getElementById('pName').textContent = 'Provider not found';
+      return;
+    }
+    providerData = snap.data();
+    document.getElementById('pName').textContent = providerData.name || 'Callora user';
+    document.getElementById('pMeta').textContent =
+      `${providerData.online ? 'Online now' : 'Offline'} · Free`;
+    document.getElementById('pRating').textContent = providerData.rating ? providerData.rating.toFixed(1) : 'New';
+    document.getElementById('pCalls').textContent = providerData.totalCalls || 0;
+    document.getElementById('pResponse').textContent = providerData.responseRate ? `${providerData.responseRate}%` : '—';
+    if (providerData.bio) document.getElementById('pBio').textContent = providerData.bio;
+  }
+
+  window.startCall = async () => {
+    const btn = document.getElementById('callBtn');
+    const errorEl = document.getElementById('errorMsg');
+    errorEl.classList.remove('show');
+
+    if (!providerData?.phone) {
+      errorEl.textContent = 'This provider has no phone number on file yet.';
+      errorEl.classList.add('show');
+      return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'Connecting...';
+
+    try {
+      const res = await fetch('/.netlify/functions/create-call', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          callerId: currentUser.uid,
+          providerId,
+          providerPhoneNumber: providerData.phone,
+          mode: 'assist',
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Could not start call');
+
+      window.location.href = `call.html?callId=${data.callId}`;
+    } catch (err) {
+      errorEl.textContent = err.message;
+      errorEl.classList.add('show');
+      btn.disabled = false;
+      btn.textContent = 'Call now';
+    }
+  };
+</script>
+
+</body>
+</html>
