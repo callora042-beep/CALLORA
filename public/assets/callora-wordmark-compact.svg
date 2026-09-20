@@ -1,0 +1,19 @@
+<svg width="280" height="70" viewBox="0 0 280 70" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="calloraGradCompact" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#8B7CFF"/>
+      <stop offset="100%" stop-color="#4F8CFF"/>
+    </linearGradient>
+    <style>
+      .word { font-family: 'Poppins', 'Segoe UI', sans-serif; font-weight: 700; letter-spacing: -0.5px; }
+    </style>
+  </defs>
+  <text x="12" y="48" class="word" font-size="40" fill="url(#calloraGradCompact)">Call</text>
+  <g transform="translate(140,26)">
+    <rect x="0" y="10" width="4" height="12" rx="2" fill="#8B7CFF"/>
+    <rect x="8" y="4" width="4" height="24" rx="2" fill="#7383F8"/>
+    <rect x="16" y="0" width="4" height="32" rx="2" fill="#5D8DF6"/>
+    <rect x="24" y="6" width="4" height="20" rx="2" fill="#4F8CFF"/>
+  </g>
+  <text x="168" y="48" class="word" font-size="40" fill="url(#calloraGradCompact)">ora</text>
+</svg>
