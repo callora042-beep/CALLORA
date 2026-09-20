@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Callora</title>
+<style>
+  body { background: #0E0B1F; color: #9C96C4; font-family: sans-serif;
+    display: flex; align-items: center; justify-content: center; height: 100vh; }
+</style>
+</head>
+<body>
+<div>Loading Callora...</div>
+<script type="module">
+  import { auth } from "./js/firebase-config.js";
+  import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+
+  onAuthStateChanged(auth, (user) => {
+    window.location.href = user ? 'home.html' : 'login.html';
+  });
+</script>
+</body>
+</html>
