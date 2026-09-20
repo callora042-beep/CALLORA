@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Callora — Profile & settings</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --violet: #8B7CFF; --blue: #4F8CFF; --bg-dark: #0E0B1F;
+    --card-dark: #171330; --border-dark: #2A2450; --muted: #9C96C4;
+    --gradient: linear-gradient(135deg, var(--violet), var(--blue));
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Poppins', sans-serif; background: var(--bg-dark); color: white; min-height: 100vh; }
+  .content { max-width: 480px; margin: 0 auto; padding: 24px 20px 100px; }
+  .profile-header { text-align: center; margin-bottom: 24px; }
+  .avatar { width: 80px; height: 80px; border-radius: 50%; background: var(--gradient); margin: 0 auto 12px; }
+  .name { font-size: 18px; font-weight: 600; }
+  .meta { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .row {
+    background: var(--card-dark); border: 1px solid var(--border-dark); border-radius: 12px;
+    padding: 14px; font-size: 13px; margin-bottom: 10px; cursor: pointer;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .row .arrow { color: var(--muted); }
+  .toggle-row { display: flex; justify-content: space-between; align-items: center; }
+  .toggle {
+    width: 40px; height: 22px; border-radius: 11px; background: var(--border-dark);
+    position: relative; cursor: pointer; flex-shrink: 0;
+  }
+  .toggle.on { background: var(--gradient); }
+  .toggle .knob { width: 18px; height: 18px; border-radius: 50%; background: white; position: absolute; top: 2px; left: 2px; transition: left 0.2s; }
+  .toggle.on .knob { left: 20px; }
+  .btn-outline {
+    border: 1px solid var(--border-dark); color: #FF9C9C; text-align: center;
+    padding: 13px; border-radius: 12px; font-size: 13px; margin-top: 20px; cursor: pointer;
+  }
+  .tabbar { position: fixed; bottom: 0; left: 0; right: 0; display: flex; justify-content: space-around; padding: 14px 0; border-top: 1px solid var(--border-dark); background: var(--bg-dark); font-size: 10px; color: var(--muted); max-width: 480px; margin: 0 auto; }
+  .tabbar a { color: inherit; text-decoration: none; }
+  .tabbar a.on { color: var(--blue); font-weight: 600; }
+</style>
+</head>
+<body>
+
+<div class="content">
+  <div class="profile-header">
+    <div class="avatar"></div>
+    <div class="name" id="uName">Loading...</div>
+    <div class="meta" id="uMeta"></div>
+  </div>
+
+  <div class="row" onclick="location.href='profile-setup.html'">
+    <span>Edit profile</span><span class="arrow">›</span>
+  </div>
+  <div class="row" onclick="location.href='voice-onboarding.html'">
+    <span>Voice clone <span id="voiceStatus" style="color:var(--muted); font-size:11px;"></span></span><span class="arrow">›</span>
+  </div>
+  <div class="row toggle-row">
+    <span>Default call mode: Auto</span>
+    <div class="toggle" id="modeToggle" onclick="toggleDefaultMode()"><div class="knob"></div></div>
+  </div>
+  <div class="row" onclick="alert('Notification settings — coming soon')">
+    <span>Notifications</span><span class="arrow">›</span>
+  </div>
+  <div class="row" onclick="alert('Privacy & blocking — coming soon')">
+    <span>Privacy & blocking</span><span class="arrow">›</span>
+  </div>
+  <div class="row" onclick="alert('Help center — coming soon')">
+    <span>Help & support</span><span class="arrow">›</span>
+  </div>
+
+  <div class="btn-outline" onclick="logout()">Log out</div>
+</div>
+
+<div class="tabbar">
+  <a href="home.html">Home</a>
+  <a href="calls.html">Calls</a>
+  <a href="account.html" class="on">Profile</a>
+</div>
+
+<script type="module">
+  import { auth, db } from "./js/firebase-config.js";
+  import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+  import { doc, getDoc, updateDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+  let currentUser = null;
+  let currentMode = 'assist';
+
+  onAuthStateChanged(auth, async (user) => {
+    if (!user) { window.location.href = 'login.html'; return; }
+    currentUser = user;
+    const snap = await getDoc(doc(db, 'users', user.uid));
+    const data = snap.data() || {};
+    document.getElementById('uName').textContent = data.name || 'Callora user';
+    document.getElementById('uMeta').textContent = data.role === 'both' ? 'Caller & provider' : (data.role === 'provider' ? 'Provider' : 'Caller');
+    document.getElementById('voiceStatus').textContent = data.cloneVoiceId ? '✓ set up' : '· not set up';
+    currentMode = data.callAssistMode || 'assist';
+    document.getElementById('modeToggle').classList.toggle('on', currentMode === 'auto');
+  });
+
+  window.toggleDefaultMode = async () => {
+    currentMode = currentMode === 'auto' ? 'assist' : 'auto';
+    document.getElementById('modeToggle').classList.toggle('on', currentMode === 'auto');
+    await updateDoc(doc(db, 'users', currentUser.uid), { callAssistMode: currentMode });
+  };
+
+  window.logout = async () => {
+    await signOut(auth);
+    window.location.href = 'login.html';
+  };
+</script>
+
+</body>
+</html>
