@@ -5,7 +5,7 @@
 //
 // Flow per call:
 //   Twilio audio in -> Deepgram (live transcript)
-//     -> on each finished sentence, ask Claude for 2-3 reply suggestions
+//     -> on each finished sentence, ask Replicate for 2-3 reply suggestions
 //     -> write transcript + suggestions to Firestore (frontend listens to this)
 //     -> assist mode: wait for the user to write `chosenReply` on the call doc
 //        auto mode: pick the top suggestion immediately
@@ -15,13 +15,12 @@
 // Deploy this folder as its own service (Railway/Render/Fly.io) — not Netlify.
 //
 // Env vars needed here: FIREBASE_SERVICE_ACCOUNT, DEEPGRAM_API_KEY,
-// ANTHROPIC_API_KEY, ELEVENLABS_API_KEY
+// REPLICATE_API_TOKEN, ELEVENLABS_API_KEY
 
 const WebSocket = require('ws');
 const fetch = require('node-fetch');
 const admin = require('firebase-admin');
 const { createClient } = require('@deepgram/sdk');
-const Anthropic = require('@anthropic-ai/sdk');
 
 admin.initializeApp({
   credential: admin.credential.cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)),
@@ -29,7 +28,6 @@ admin.initializeApp({
 const db = admin.firestore();
 
 const deepgram = createClient(process.env.DEEPGRAM_API_KEY);
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 const PORT = process.env.PORT || 8080;
 const wss = new WebSocket.Server({ port: PORT });
@@ -95,8 +93,7 @@ wss.on('connection', (twilioWs) => {
   twilioWs.on('close', () => {
     if (dgLive) dgLive.finish();
   });
-});
-// --- Core turn logic -------------------------------------------------------
+});// --- Core turn logic -------------------------------------------------------
 
 async function handleFinalTranscript({ callId, userId, mode, transcript, twilioWs, streamSid }) {
   const callRef = db.collection('calls').doc(callId);
@@ -137,16 +134,42 @@ async function handleFinalTranscript({ callId, userId, mode, transcript, twilioW
 }
 
 async function getSuggestions(transcript) {
-  const response = await anthropic.messages.create({
-    model: 'claude-sonnet-4-5',
-    max_tokens: 150,
-    messages: [{
-      role: 'user',
-      content: `You're helping someone reply naturally during a live phone call. The other person on the call just said: "${transcript}"\n\nGive exactly 3 short, casual reply options (under 15 words each) they could say back. Return only the 3 replies, one per line, no numbering.`,
-    }],
+  const prompt = `You're helping someone reply naturally during a live phone call. The other person on the call just said: "${transcript}"
+
+Give exactly 3 short, casual reply options (under 15 words each) they could say back. Return only the 3 replies, one per line, no numbering, no extra text.`;
+
+  const startRes = await fetch('https://api.replicate.com/v1/models/meta/meta-llama-3-8b-instruct/predictions', {
+    method: 'POST',
+    headers: {
+      Authorization: `Token ${process.env.REPLICATE_API_TOKEN}`,
+      'Content-Type': 'application/json',
+      Prefer: 'wait', // ask Replicate to hold the request open until done, when possible
+    },
+    body: JSON.stringify({
+      input: {
+        prompt,
+        max_new_tokens: 150,
+        temperature: 0.7,
+      },
+    }),
   });
 
-  const text = response.content[0]?.text || '';
+  let prediction = await startRes.json();
+
+  // If Prefer: wait timed out before completion, poll until it's done
+  while (prediction.status !== 'succeeded' && prediction.status !== 'failed') {
+    await new Promise((r) => setTimeout(r, 500));
+    const pollRes = await fetch(prediction.urls.get, {
+      headers: { Authorization: `Token ${process.env.REPLICATE_API_TOKEN}` },
+    });
+    prediction = await pollRes.json();
+  }
+
+  if (prediction.status === 'failed') {
+    throw new Error(`Replicate prediction failed: ${prediction.error}`);
+  }
+
+  const text = Array.isArray(prediction.output) ? prediction.output.join('') : (prediction.output || '');
   return text.split('\n').map((l) => l.trim()).filter(Boolean).slice(0, 3);
 }
 
@@ -196,4 +219,4 @@ function sendAudioToTwilio(twilioWs, streamSid, mulawBase64) {
     streamSid,
     media: { payload: mulawBase64 },
   }));
-}
+    }
