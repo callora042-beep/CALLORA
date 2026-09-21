@@ -93,7 +93,8 @@ wss.on('connection', (twilioWs) => {
   twilioWs.on('close', () => {
     if (dgLive) dgLive.finish();
   });
-});// --- Core turn logic -------------------------------------------------------
+});
+// --- Core turn logic -------------------------------------------------------
 
 async function handleFinalTranscript({ callId, userId, mode, transcript, twilioWs, streamSid }) {
   const callRef = db.collection('calls').doc(callId);
