@@ -20,7 +20,7 @@
 const WebSocket = require('ws');
 const fetch = require('node-fetch');
 const admin = require('firebase-admin');
-const { createClient } = require('@deepgram/sdk');
+const { createClient, LiveTranscriptionEvents } = require('@deepgram/sdk');
 
 admin.initializeApp({
   credential: admin.credential.cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)),
@@ -39,6 +39,8 @@ wss.on('connection', (twilioWs) => {
   let userId = null;      // the Callora user whose cloned voice we speak with
   let mode = 'assist';    // pulled from the call doc once we know callId
   let dgLive = null;
+  let dgReady = false;
+  const pendingAudio = []; // buffer audio that arrives before Deepgram's socket is open
 
   twilioWs.on('message', async (msg) => {
     const data = JSON.parse(msg);
@@ -60,10 +62,22 @@ wss.on('connection', (twilioWs) => {
           interim_results: false,
         });
 
-        dgLive.on('transcript', async (evt) => {
+        dgLive.on(LiveTranscriptionEvents.Open, () => {
+          dgReady = true;
+          // Flush any audio chunks that arrived before the socket was ready
+          while (pendingAudio.length) {
+            dgLive.send(pendingAudio.shift());
+          }
+        });
+
+        dgLive.on(LiveTranscriptionEvents.Transcript, async (evt) => {
           const transcript = evt.channel?.alternatives?.[0]?.transcript;
           if (!transcript || !evt.is_final) return;
           await handleFinalTranscript({ callId, userId, mode, transcript, twilioWs, streamSid: data.start.streamSid });
+        });
+
+        dgLive.on(LiveTranscriptionEvents.Error, (err) => {
+          console.error(`Deepgram error on call ${callId}:`, err);
         });
 
         break;
@@ -71,8 +85,11 @@ wss.on('connection', (twilioWs) => {
 
       case 'media': {
         // Base64-encoded mulaw/8000 audio chunk from the caller's side of the call
-        if (dgLive) {
-          dgLive.send(Buffer.from(data.media.payload, 'base64'));
+        const chunk = Buffer.from(data.media.payload, 'base64');
+        if (dgLive && dgReady) {
+          dgLive.send(chunk);
+        } else {
+          pendingAudio.push(chunk);
         }
         break;
       }
@@ -118,7 +135,8 @@ async function handleFinalTranscript({ callId, userId, mode, transcript, twilioW
   } else {
     // Assist mode: wait for the user to write their pick to `chosenReply`
     // on the call doc (the frontend sets this when they tap/edit a suggestion).
-    chosenText = await waitForChosenReply(callRef);
+    // Falls back to the top suggestion after 20s so a live call never hangs forever.
+    chosenText = await waitForChosenReply(callRef, suggestions[0]);
   }
 
   await callRef.update({
@@ -175,15 +193,25 @@ Give exactly 3 short, casual reply options (under 15 words each) they could say 
   return text.split('\n').map((l) => l.trim()).filter(Boolean).slice(0, 3);
 }
 
-function waitForChosenReply(callRef) {
+function waitForChosenReply(callRef, fallbackText, timeoutMs = 20000) {
   return new Promise((resolve) => {
+    let settled = false;
     const unsubscribe = callRef.onSnapshot((snap) => {
       const chosen = snap.data()?.chosenReply;
-      if (chosen) {
+      if (chosen && !settled) {
+        settled = true;
+        clearTimeout(timer);
         unsubscribe();
         resolve(chosen);
       }
     });
+    const timer = setTimeout(() => {
+      if (!settled) {
+        settled = true;
+        unsubscribe();
+        resolve(fallbackText);
+      }
+    }, timeoutMs);
   });
 }
 
@@ -221,4 +249,4 @@ function sendAudioToTwilio(twilioWs, streamSid, mulawBase64) {
     streamSid,
     media: { payload: mulawBase64 },
   }));
-    }
+}
